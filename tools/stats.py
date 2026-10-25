@@ -16,20 +16,29 @@ def strip_code(t):
 def analyze(path):
     t = open(path, encoding="utf-8").read()
     body = strip_code(t)
-    # 指令块内容单独统计（它们也可能含汉字，但不算"解读文字"）
-    fences = re.findall(r":::(\w+)\n(.*?)\n:::", body, flags=re.S)
-    nob = re.sub(r":::\w+\n.*?\n:::", "", body, flags=re.S)
+    fences = re.findall(r"^:::+\s*(\w+)(?:[^\n]*)\n(.*?)\n:::", body, flags=re.S | re.M)
+    # pbtns / personas / sources 是导航或索引，不算叙事正文；分析块要计入。
+    content_fences = {"scene", "deep", "insight", "arc", "reveal", "note"}
+    fence_prose = 0
+    for kind, content in fences:
+        if kind in content_fences:
+            prose = re.sub(r"^\s*### .*$", "", content, flags=re.M)
+            prose = re.sub(r"^\s*\[[^]]+\|\d+(?:-\d+)?\]\s*$", "", prose, flags=re.M)
+            fence_prose += len(re.findall(r"[\u4e00-\u9fff]", prose))
+    nob = re.sub(r"^:::+\s*\w+[^\n]*\n.*?\n:::", "", body, flags=re.S | re.M)
     nob = re.sub(r"^#{2,3} .*$", "", nob, flags=re.M)
     nob = re.sub(r"^[-*] .*$", "", nob, flags=re.M)
-    prose_cn = len(re.findall(r"[\u4e00-\u9fff]", nob))
-    total_cn = len(re.findall(r"[\u4e00-\u9fff]", t))
-    acts = re.findall(r"^### (.+?)\s*\{act,([^}]*)\}", t, flags=re.M)
+    prose_cn = len(re.findall(r"[\u4e00-\u9fff]", nob)) + fence_prose
+    total_cn = len(re.findall(r"[\u4e00-\u9fff]", body))
+    acts = re.findall(r"^### (.+?)\s*\{act,([^}]*)\}", body, flags=re.M)
     wordcounts = []
-    # 逐幕切分，算每幕正文
+    # 逐幕切分；每幕中的场景与分析同样算正文。
     chunks = re.split(r"^### .*?\{act[^}]*\}", body, flags=re.M)[1:]
     for c in chunks:
-        c = re.sub(r":::\w+\n.*?\n:::", "", c, flags=re.S)
-        c = re.sub(r"^\s*### .*$", "", c, flags=re.M)
+        c = re.split(r"^## ", c, maxsplit=1, flags=re.M)[0]
+        c = re.sub(r"^:::+\s*(?:pbtns|personas|sources)[^\n]*\n.*?\n:::", "", c, flags=re.S | re.M)
+        c = re.sub(r"^:::+\s*\w+[^\n]*$|^:::+\s*$|^\s*### .*$", "", c, flags=re.M)
+        c = re.sub(r"^\s*\[[^]]+\|\d+(?:-\d+)?\]\s*$", "", c, flags=re.M)
         wordcounts.append(len(re.findall(r"[\u4e00-\u9fff]", c)))
     return {
         "total_cn": total_cn,
@@ -44,6 +53,8 @@ def main():
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
     rows = []
     for f in sorted(glob.glob(os.path.join(CONTENT, "*.md"))):
+        if os.path.basename(f).startswith("_"):
+            continue
         d = analyze(f)
         d["name"] = os.path.basename(f)[:-3]
         rows.append(d)

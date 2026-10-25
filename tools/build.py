@@ -186,9 +186,45 @@ def deep_html(buf, bv):
             f'<div class="deep-body">{ "".join(merged) }</div></details>')
 
 
+def insight_html(buf):
+    """::: insight 标题 —— 正文分析，默认展开。"""
+    head = buf[0].strip() if buf else "解读"
+    inner = [f"<p>{inline(x.strip())}</p>" for x in buf[1:] if x.strip()]
+    return (f'<aside class="insight"><div class="insight-title">✦ {inline(head)}</div>'
+            f'<div class="insight-body">{"".join(inner)}</div></aside>')
+
+
+def arc_html(buf):
+    """::: arc 标题；以 标签|正文 的行呈现人物变化。"""
+    head = buf[0].strip() if buf else "人物弧光"
+    rows = []
+    for raw in buf[1:]:
+        if "|" in raw:
+            label, text = raw.split("|", 1)
+            rows.append(f'<div class="arc-row"><dt>{inline(label.strip())}</dt><dd>{inline(text.strip())}</dd></div>')
+    return f'<section class="arc"><h3>{inline(head)}</h3><dl>{"".join(rows)}</dl></section>'
+
+
+def sources_html(buf):
+    """::: sources；每行 名称|URL|用途说明。"""
+    rows = []
+    for raw in buf:
+        parts = raw.split("|", 2)
+        if len(parts) == 3:
+            name, url, desc = (x.strip() for x in parts)
+            rows.append(f'<li><a href="{H.escape(url, quote=True)}" target="_blank" rel="noopener">{esc(name)} ↗</a><span>{inline(desc)}</span></li>')
+    return f'<ol class="sources">{"".join(rows)}</ol>'
+
+
 def fence_html(kind, buf, bv):
     if kind == "note":
         return f'<div class="note">{"".join(inline(x) for x in buf)}</div>'
+    if kind == "insight":
+        return insight_html(buf)
+    if kind == "arc":
+        return arc_html(buf)
+    if kind == "sources":
+        return sources_html(buf)
     if kind == "scene":
         return scene_html(buf, bv)
     if kind == "deep":
@@ -260,7 +296,7 @@ def render(meta, navs, stats, toks):
 <title>{esc(meta.get("page-title","剧情指南"))}</title>
 <link rel="stylesheet" href="assets/style.css">
 </head>
-<body class="theme-{esc(meta.get("theme","fgo"))}">
+<body class="theme-{esc(meta.get("theme","fgo"))} layout-{esc(meta.get("layout","cards"))}">
 <div class="hero"><div class="wrap">
 <h1><small>{esc(meta.get("hero-eyebrow",""))}</small>{esc(meta.get("hero-title",""))}</h1>''')
     if meta.get("hero-lead"):
@@ -306,13 +342,12 @@ def render(meta, navs, stats, toks):
                 close_act()
                 ver = at.get("ver", "")
                 act_id = "act-" + ver.replace(".", "")
-                n = 2
+                act_id = "act-" + str(len(used_acts) + 1)
                 while act_id in used_acts:
-                    act_id = "act-%s-%d" % (ver.replace(".", ""), n)
-                    n += 1
+                    act_id = "act-" + str(len(used_acts) + 1)
                 used_acts.add(act_id)
                 pr = re.match(r"\[(\d+),\s*(\d+)\]", at.get("p", "[]"))
-                o.append(f'<div class="chapter act" data-act="{act_id}" id="{act_id}">')
+                o.append(f'<div class="chapter act" data-act="{act_id}" id="{act_id}" data-nav="{esc(title)}">')
                 o.append(f'<div class="head"><div class="emblem">{esc(ver)}</div><div><h3>{inline(title)}{chip(at.get("spoiler"))}</h3>')
                 if at.get("sub"): o.append(f'<div class="subtitle">{inline(at["sub"])}</div>')
                 o.append('</div></div>')
@@ -328,8 +363,8 @@ def render(meta, navs, stats, toks):
                 o.append(f'<h3>{inline(title)}{chip(at.get("spoiler"))}</h3>')
         elif kind == "fence":
             k, buf = tok[1], tok[2]
-            if k in ("pbtns", "scene", "deep") and act_open:
-                # 幕内块：留在 chapter 卡片内部
+            if act_open and k in ("pbtns", "scene", "deep", "insight", "arc", "sources"):
+                # 幕内块：留在当前章节内部
                 o.append(fence_html(k, buf, bv))
             elif k == "note" and act_open:
                 o.append(fence_html("note", buf, bv)); close_act()
@@ -349,6 +384,7 @@ def render(meta, navs, stats, toks):
 <div id="dock"><div class="bar"><span id="dockTitle">页面内播放</span><button onclick="closeDock()">✕ 关闭</button></div><div id="dockFrame"></div></div>
 <script src="assets/common.js"></script>
 <script src="assets/reader.js"></script>
+<script src="assets/reader-nav.js"></script>
 </body></html>''')
     return "\n".join(o)
 

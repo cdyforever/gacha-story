@@ -59,7 +59,14 @@ def parse(md_path):
         s = lines[i].strip()
         if not s: i += 1; continue
         if s.startswith(":::"):
-            kind, buf = s[3:].strip(), []
+            # 块头形如 "::: kind 可选参数"，kind 取第一个词，其余作为参数
+            head = s[3:].strip()
+            parts = head.split(None, 1)
+            kind = parts[0] if parts else ""
+            arg = parts[1].strip() if len(parts) > 1 else ""
+            buf = []
+            if arg:
+                buf.append(arg)  # 参数行并入内容首行，交由各块自行解释
             i += 1
             while i < len(lines) and lines[i].strip() != ":::":
                 buf.append(lines[i]); i += 1
@@ -91,9 +98,101 @@ def parse(md_path):
             toks.append(("p", " ".join(buf)))
     return meta, navs, stats, toks
 
+def scene_html(buf, bv):
+    """::: scene 名场面块
+    语法：
+      ::: scene 标题（可选，第一行不带标记即为标题）
+      > 对白原文
+      > —— 说话人 / 出处（以「——」或「—」开头的行视为出处署名）
+      正文段落 = 点评（可多段，空行分段）
+      [按钮文字|分P号]  可选，生成直达按钮
+      :::
+    """
+    title, quotes, notes, btns = "", [], [], []
+    for rawn in buf:
+        s = rawn.strip()
+        if not s:
+            continue
+        if s == "\\":  # 显式分段标记
+            continue
+        if s.startswith(">"):
+            q = s[1:].strip()
+            quotes.append(q)
+        elif s.startswith("[") and re.match(r"\[([^\]]+)\|(\d+(?:-\d+)?)\]", s):
+            m = re.match(r"\[([^\]]+)\|(\d+(?:-\d+)?)\]", s)
+            btns.append((m.group(1), m.group(2)))
+        elif not title and not quotes and not notes:
+            title = s
+        else:
+            notes.append(s)
+
+    # 对白：以「——」「—」「–」开头的行渲染为署名
+    qhtml = []
+    for q in quotes:
+        if re.match(r"^[—–\-]{1,2}\s*", q):
+            qhtml.append(f'<span class="q-src">{esc(re.sub(r"^[—–\-]{1,2}\s*", "", q))}</span>')
+        else:
+            qhtml.append(f'<p class="q-line">{inline(q)}</p>')
+    qblock = ('<blockquote class="sc-quote">' + "".join(qhtml) + "</blockquote>") if qhtml else ""
+    nblock = "".join(f"<p>{inline(x)}</p>" for x in notes)
+
+    btn_html = ""
+    if btns:
+        btn_html = '<div class="pbtns">' + "".join(
+            f'<a class="pbtn" href="https://www.bilibili.com/video/{bv}?p={p.split("-")[0]}" target="_blank">▶ {esc(t)}</a>'
+            for t, p in btns) + "</div>"
+
+    thtml = f'<div class="sc-title">{inline(title)}</div>' if title else ""
+    return f'<div class="scene">{thtml}{qblock}<div class="sc-note">{nblock}</div>{btn_html}</div>'
+
+
+def deep_html(buf, bv):
+    """::: deep 深度解读块（默认折叠，可带标题与分级）
+    语法：::: deep 标题 {mid|heavy}
+    """
+    head = buf[0].strip() if buf else "深度解读"
+    lvl = ""
+    m = re.search(r"\{(light|mid|heavy)\}\s*$", head)
+    if m:
+        lvl = m.group(1)
+        head = head[:m.start()].strip()
+    body = buf[1:]
+    inner = []
+    for x in body:
+        s = x.strip()
+        if not s:
+            continue
+        if s.startswith("### "):
+            inner.append(f"<h4>{inline(s[4:])}</h4>")
+        elif s.startswith("- "):
+            inner.append(f"<li>{inline(s[2:])}</li>")
+        else:
+            inner.append(f"<p>{inline(s)}</p>")
+    # 把连续的 li 包进 ul
+    merged, tmp = [], []
+    for x in inner:
+        if x.startswith("<li>"):
+            tmp.append(x)
+        else:
+            if tmp:
+                merged.append('<ul class="hl">' + "".join(tmp) + "</ul>")
+                tmp = []
+            merged.append(x)
+    if tmp:
+        merged.append('<ul class="hl">' + "".join(tmp) + "</ul>")
+
+    lvl_cls = f" lvl-{lvl[0]}" if lvl else ""
+    return (f'<details class="deep"><summary>💡 {inline(head)}</summary>'
+            f'<div class="deep-body">{ "".join(merged) }</div></details>')
+
+
 def fence_html(kind, buf, bv):
     if kind == "note":
         return f'<div class="note">{"".join(inline(x) for x in buf)}</div>'
+    if kind == "scene":
+        return scene_html(buf, bv)
+    if kind == "deep":
+        return deep_html(buf, bv)
     if kind == "pbtns":
         out = ['<div class="pbtns">']
         for ln in buf:
@@ -229,8 +328,9 @@ def render(meta, navs, stats, toks):
                 o.append(f'<h3>{inline(title)}{chip(at.get("spoiler"))}</h3>')
         elif kind == "fence":
             k, buf = tok[1], tok[2]
-            if k == "pbtns" and act_open:
-                o.append(fence_html("pbtns", buf, bv))
+            if k in ("pbtns", "scene", "deep") and act_open:
+                # 幕内块：留在 chapter 卡片内部
+                o.append(fence_html(k, buf, bv))
             elif k == "note" and act_open:
                 o.append(fence_html("note", buf, bv)); close_act()
             else:
@@ -258,6 +358,8 @@ def main():
     built = 0
     for md in sorted(glob.glob(os.path.join(CONTENT, "*.md"))):
         pid = os.path.basename(md)[:-3]
+        if pid.startswith("_"):  # 下划线开头为元文档（如 _STYLE.md），不构建
+            continue
         if targets and pid not in targets:
             continue
         meta, navs, stats, toks = parse(md)

@@ -1,0 +1,10 @@
+# 抓取素材与中间数据：不进版本库（本地写作参考用）
+_raw/
+
+# 系统 / 编辑器杂项
+Thumbs.db
+desktop.ini
+.DS_Store
+.workbuddy-ai/
+__pycache__/
+*.pyc

@@ -1,6 +1,6 @@
 # 不玩游戏看剧情 · 视频追剧指南
 
-**在线阅读：<https://cdyforever.github.io/fgo-story-guide/>**
+**在线阅读：<https://cdyforever.github.io/gacha-story/>**
 
 为「剧情本身就是卖点」的游戏整理纯视频观影路线：章节梗概 + 解说安利 + 名场面 + 一键直达 B 站对应分 P。所有视频数据通过 Bilibili 开放接口实时校验。
 
@@ -8,9 +8,9 @@
 
 | 游戏 | 页面 | 状态 |
 |---|---|---|
-| Fate / Grand Order | [fgo.html](https://cdyforever.github.io/fgo-story-guide/fgo.html) | 已上线（第一部~奏章IV） |
-| 原神 | [genshin.html](https://cdyforever.github.io/fgo-story-guide/genshin.html) | 第一期：魔神任务~7.0至冬 + 大型活动 + 世界观考据区；第二期（传说/世界任务）筹备中 |
-| 崩坏：星穹铁道 | — | 筹备中 |
+| Fate / Grand Order | [fgo.html](https://cdyforever.github.io/gacha-story/fgo.html) | 已上线（第一部~奏章IV） |
+| 原神 | [genshin.html](https://cdyforever.github.io/gacha-story/genshin.html) | 第一期：魔神任务~7.0至冬 + 大型活动 + 世界观考据区；第二期（传说/世界任务）筹备中 |
+| 崩坏：星穹铁道 | [hsr.html](https://cdyforever.github.io/gacha-story/hsr.html) | 开拓任务五幕 + 支线 + 考据区；翁法罗斯篇已上线 |
 
 每个游戏一张独立页面，数据互不干扰；`index.html` 为门户。顶部导航在各页面间切换。
 
